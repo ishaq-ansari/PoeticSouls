@@ -113,8 +113,8 @@ const PoemDetailModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] bg-white dark:bg-gray-900">
-        <DialogHeader className="flex flex-row items-start justify-between">
+      <DialogContent className="sm:max-w-[700px] max-h-[90vh] bg-white dark:bg-gray-900 overflow-hidden relative">
+        <DialogHeader className="flex flex-row items-start justify-between pr-8">
           <div>
             <DialogTitle className="text-2xl font-serif">{title}</DialogTitle>
             <DialogDescription className="flex items-center gap-2 mt-1">
@@ -130,7 +130,7 @@ const PoemDetailModal = ({
             variant="ghost"
             size="icon"
             onClick={() => onOpenChange(false)}
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 p-0 absolute top-4 right-4 z-10"
           >
             <X className="h-4 w-4" />
           </Button>
@@ -147,7 +147,7 @@ const PoemDetailModal = ({
           ))}
         </div>
 
-        <ScrollArea className="pr-4 max-h-[200px]">
+        <ScrollArea className="pr-4 max-h-[150px]">
           <div className="font-serif text-gray-800 dark:text-gray-200 whitespace-pre-line">
             {content}
           </div>
@@ -246,7 +246,7 @@ const PoemDetailModal = ({
         <div className="space-y-4">
           <h3 className="font-medium">Comments</h3>
 
-          <ScrollArea className="pr-4 max-h-[200px]">
+          <ScrollArea className="pr-4 max-h-[150px]">
             <div className="space-y-4">
               {localComments.map((comment) => (
                 <div key={comment.id} className="flex gap-3">
@@ -274,7 +274,7 @@ const PoemDetailModal = ({
           </ScrollArea>
         </div>
 
-        <DialogFooter className="flex items-center gap-2 mt-4">
+        <DialogFooter className="flex items-center gap-2 mt-4 pt-2 border-t">
           <Avatar className="h-8 w-8">
             <AvatarImage
               src="https://api.dicebear.com/7.x/avataaars/svg?seed=You"

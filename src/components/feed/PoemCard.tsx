@@ -40,14 +40,16 @@ const PoemCard = ({
   onClick = () => {},
 }: PoemCardProps) => {
   return (
-    <Card
-      className="w-full max-w-[550px] h-[320px] flex flex-col bg-white dark:bg-gray-900 hover:shadow-lg transition-shadow duration-300 cursor-pointer"
-      onClick={onClick}
-    >
+    <Card className="w-full max-w-[550px] h-[320px] flex flex-col bg-white dark:bg-gray-900 hover:shadow-lg transition-shadow duration-300">
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
           <div>
-            <CardTitle className="text-xl font-serif">{title}</CardTitle>
+            <CardTitle
+              className="text-xl font-serif cursor-pointer"
+              onClick={onClick}
+            >
+              {title}
+            </CardTitle>
             <CardDescription className="text-sm">by {author}</CardDescription>
           </div>
           <div className="flex space-x-1">
@@ -64,7 +66,10 @@ const PoemCard = ({
       </CardHeader>
 
       <CardContent className="flex-grow overflow-hidden">
-        <p className="text-gray-700 dark:text-gray-300 font-serif whitespace-pre-line line-clamp-5">
+        <p
+          className="text-gray-700 dark:text-gray-300 font-serif whitespace-pre-line line-clamp-5 cursor-pointer"
+          onClick={onClick}
+        >
           {content}
         </p>
       </CardContent>
@@ -78,6 +83,10 @@ const PoemCard = ({
                   variant="ghost"
                   size="sm"
                   className={`p-0 h-auto ${isLiked ? "text-red-500" : "text-gray-500 dark:text-gray-400"}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    console.log("Like button clicked");
+                  }}
                 >
                   <Heart
                     className="h-5 w-5 mr-1"
@@ -99,6 +108,10 @@ const PoemCard = ({
                   variant="ghost"
                   size="sm"
                   className="p-0 h-auto text-gray-500 dark:text-gray-400"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    console.log("Comment button clicked");
+                  }}
                 >
                   <MessageCircle className="h-5 w-5 mr-1" />
                   <span>{comments}</span>
@@ -119,6 +132,10 @@ const PoemCard = ({
                   variant="ghost"
                   size="icon"
                   className={`p-0 h-auto ${isBookmarked ? "text-blue-500" : "text-gray-500 dark:text-gray-400"}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    console.log("Bookmark button clicked");
+                  }}
                 >
                   <Bookmark
                     className="h-5 w-5"
@@ -139,6 +156,10 @@ const PoemCard = ({
                   variant="ghost"
                   size="icon"
                   className="p-0 h-auto text-gray-500 dark:text-gray-400"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    console.log("Share button clicked");
+                  }}
                 >
                   <Share2 className="h-5 w-5" />
                 </Button>

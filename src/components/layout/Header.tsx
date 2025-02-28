@@ -88,16 +88,32 @@ const Header = ({
                     <User className="h-8 w-8 text-gray-500" />
                   </div>
                   <p className="text-lg">{username}</p>
-                  <Button variant="outline" className="w-full">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => console.log("Edit Profile clicked")}
+                  >
                     Edit Profile
                   </Button>
-                  <Button variant="outline" className="w-full">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => console.log("My Poems clicked")}
+                  >
                     My Poems
                   </Button>
-                  <Button variant="outline" className="w-full">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => console.log("Bookmarks clicked")}
+                  >
                     Bookmarks
                   </Button>
-                  <Button variant="destructive" className="w-full">
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={() => console.log("Sign Out clicked")}
+                  >
                     Sign Out
                   </Button>
                 </div>
