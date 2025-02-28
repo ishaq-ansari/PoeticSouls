@@ -7,6 +7,23 @@ export type Comment = Database["public"]["Tables"]["comments"]["Row"] & {
   profile?: Profile;
 };
 
+// Check if a username (display name) is already taken
+export async function isUsernameTaken(displayName: string) {
+  try {
+    const { data, error, count } = await supabase
+      .from("profiles")
+      .select("*", { count: 'exact' })
+      .ilike('display_name', displayName);
+
+    if (error) throw error;
+    
+    return { isTaken: count ? count > 0 : false, error: null };
+  } catch (error) {
+    console.error("Error checking username:", error);
+    return { isTaken: false, error };
+  }
+}
+
 export async function signUp({
   email,
   password,
@@ -19,6 +36,27 @@ export async function signUp({
   useRealName: boolean;
 }) {
   try {
+    // First check if the username is taken
+    const { isTaken, error: checkError } = await isUsernameTaken(displayName);
+    
+    if (checkError) {
+      return { 
+        data: null, 
+        error: {
+          message: `Error checking username availability: ${checkError instanceof Error ? checkError.message : 'Unknown error'}`
+        }
+      };
+    }
+    
+    if (isTaken) {
+      return { 
+        data: null, 
+        error: {
+          message: "This username is already taken. Please choose a different one."
+        }
+      };
+    }
+
     // Create the user account with metadata for the trigger function
     const { data, error: authError } = await supabase.auth.signUp({
       email,

@@ -3,32 +3,110 @@ import { Poem, Comment } from "./auth";
 
 export async function getPoems() {
   try {
-    const { data, error } = await supabase
+    const { data: poems, error } = await supabase
       .from("poems")
       .select(`*, profiles(*)`) // Join with profiles to get author info
       .order("created_at", { ascending: false });
 
     if (error) throw error;
 
-    return { poems: data, error: null };
+    // Get likes and comments counts for each poem
+    if (poems && poems.length > 0) {
+      const poemsWithCounts = await Promise.all(
+        poems.map(async (poem) => {
+          const [likesResult, commentsResult] = await Promise.all([
+            getLikesCount(poem.id),
+            getCommentsCount(poem.id)
+          ]);
+          
+          return {
+            ...poem,
+            likes_count: likesResult.count || 0,
+            comments_count: commentsResult.count || 0
+          };
+        })
+      );
+      
+      return { poems: poemsWithCounts, error: null };
+    }
+
+    return { poems, error: null };
   } catch (error) {
     console.error("Error getting poems:", error);
     return { poems: null, error };
   }
 }
 
+export async function getLikesCount(poemId: string) {
+  try {
+    const { count, error } = await supabase
+      .from("likes")
+      .select("*", { count: "exact", head: true })
+      .eq("poem_id", poemId);
+      
+    if (error) throw error;
+    return { count, error: null };
+  } catch (error) {
+    console.error("Error getting likes count:", error);
+    return { count: 0, error };
+  }
+}
+
+export async function getCommentsCount(poemId: string) {
+  try {
+    const { count, error } = await supabase
+      .from("comments")
+      .select("*", { count: "exact", head: true })
+      .eq("poem_id", poemId);
+      
+    if (error) throw error;
+    return { count, error: null };
+  } catch (error) {
+    console.error("Error getting comments count:", error);
+    return { count: 0, error };
+  }
+}
+
 export async function getTrendingPoems() {
   try {
-    // Get poems with the most likes in the last 7 days
-    const { data, error } = await supabase
+    // First get poems
+    const { data: poems, error } = await supabase
       .from("poems")
-      .select(`*, profiles(*), likes(count)`) // Join with profiles and count likes
-      .order("likes.count", { ascending: false })
-      .limit(20);
-
+      .select(`*, profiles(*)`)
+      .order("created_at", { ascending: false })
+      .limit(50); // Get a reasonable number to start with
+      
     if (error) throw error;
-
-    return { poems: data, error: null };
+    
+    // If no poems, return early
+    if (!poems || poems.length === 0) {
+      return { poems: [], error: null };
+    }
+    
+    // Get likes for each poem to determine trending
+    const poemsWithCounts = await Promise.all(
+      poems.map(async (poem) => {
+        const [likesResult, commentsResult] = await Promise.all([
+          getLikesCount(poem.id),
+          getCommentsCount(poem.id)
+        ]);
+        
+        return {
+          ...poem,
+          likes_count: likesResult.count || 0,
+          comments_count: commentsResult.count || 0,
+          // Calculate a trending score based on likes and comments
+          trending_score: (likesResult.count || 0) * 2 + (commentsResult.count || 0) * 3
+        };
+      })
+    );
+    
+    // Sort by trending score and return top 20
+    const sortedPoems = poemsWithCounts
+      .sort((a, b) => b.trending_score - a.trending_score)
+      .slice(0, 20);
+      
+    return { poems: sortedPoems, error: null };
   } catch (error) {
     console.error("Error getting trending poems:", error);
     return { poems: null, error };
@@ -37,17 +115,91 @@ export async function getTrendingPoems() {
 
 export async function getUserPoems(userId: string) {
   try {
-    const { data, error } = await supabase
+    const { data: poems, error } = await supabase
       .from("poems")
-      .select(`*`)
+      .select(`*, profiles(*)`)
       .eq("author_id", userId)
       .order("created_at", { ascending: false });
-
+      
     if (error) throw error;
 
-    return { poems: data, error: null };
+    // Get likes and comments counts for each poem
+    if (poems && poems.length > 0) {
+      const poemsWithCounts = await Promise.all(
+        poems.map(async (poem) => {
+          const [likesResult, commentsResult] = await Promise.all([
+            getLikesCount(poem.id),
+            getCommentsCount(poem.id)
+          ]);
+          
+          return {
+            ...poem,
+            likes_count: likesResult.count || 0,
+            comments_count: commentsResult.count || 0
+          };
+        })
+      );
+      
+      return { poems: poemsWithCounts, error: null };
+    }
+    
+    return { poems, error: null };
   } catch (error) {
     console.error("Error getting user poems:", error);
+    return { poems: null, error };
+  }
+}
+
+export async function getBookmarkedPoems(userId: string) {
+  try {
+    // First get bookmarks for the user
+    const { data: bookmarks, error: bookmarksError } = await supabase
+      .from("bookmarks")
+      .select("poem_id")
+      .eq("user_id", userId);
+      
+    if (bookmarksError) throw bookmarksError;
+    
+    if (!bookmarks || bookmarks.length === 0) {
+      return { poems: [], error: null };
+    }
+    
+    // Get the poem IDs from bookmarks
+    const poemIds = bookmarks.map(bookmark => bookmark.poem_id);
+    
+    // Fetch the actual poems
+    const { data: poems, error: poemsError } = await supabase
+      .from("poems")
+      .select(`*, profiles(*)`)
+      .in("id", poemIds)
+      .order("created_at", { ascending: false });
+      
+    if (poemsError) throw poemsError;
+    
+    // Get likes and comments counts for each poem
+    if (poems && poems.length > 0) {
+      const poemsWithCounts = await Promise.all(
+        poems.map(async (poem) => {
+          const [likesResult, commentsResult] = await Promise.all([
+            getLikesCount(poem.id),
+            getCommentsCount(poem.id)
+          ]);
+          
+          return {
+            ...poem,
+            likes_count: likesResult.count || 0,
+            comments_count: commentsResult.count || 0,
+            isBookmarked: true
+          };
+        })
+      );
+      
+      return { poems: poemsWithCounts, error: null };
+    }
+    
+    return { poems, error: null };
+  } catch (error) {
+    console.error("Error getting bookmarked poems:", error);
     return { poems: null, error };
   }
 }
@@ -73,9 +225,9 @@ export async function createPoem({
         author_id: authorId,
       })
       .select();
-
+      
     if (error) throw error;
-
+    
     return { poem: data[0], error: null };
   } catch (error) {
     console.error("Error creating poem:", error);
@@ -85,15 +237,27 @@ export async function createPoem({
 
 export async function getPoemById(poemId: string) {
   try {
-    const { data, error } = await supabase
+    const { data: poem, error } = await supabase
       .from("poems")
       .select(`*, profiles(*)`) // Join with profiles to get author info
       .eq("id", poemId)
       .single();
-
+      
     if (error) throw error;
-
-    return { poem: data, error: null };
+    
+    // Get likes and comments counts
+    const [likesResult, commentsResult] = await Promise.all([
+      getLikesCount(poemId),
+      getCommentsCount(poemId)
+    ]);
+    
+    const poemWithCounts = {
+      ...poem,
+      likes_count: likesResult.count || 0,
+      comments_count: commentsResult.count || 0
+    };
+    
+    return { poem: poemWithCounts, error: null };
   } catch (error) {
     console.error("Error getting poem:", error);
     return { poem: null, error };
@@ -107,9 +271,8 @@ export async function getCommentsByPoemId(poemId: string) {
       .select(`*, profiles(*)`) // Join with profiles to get author info
       .eq("poem_id", poemId)
       .order("created_at", { ascending: false });
-
+      
     if (error) throw error;
-
     return { comments: data, error: null };
   } catch (error) {
     console.error("Error getting comments:", error);
@@ -135,9 +298,8 @@ export async function addComment({
         content,
       })
       .select(`*, profiles(*)`);
-
+      
     if (error) throw error;
-
     return { comment: data[0], error: null };
   } catch (error) {
     console.error("Error adding comment:", error);
@@ -159,7 +321,7 @@ export async function likePoem({
       .select("*")
       .eq("poem_id", poemId)
       .eq("user_id", userId);
-
+      
     if (existingLike && existingLike.length > 0) {
       // Already liked, so unlike
       const { error } = await supabase
@@ -167,7 +329,7 @@ export async function likePoem({
         .delete()
         .eq("poem_id", poemId)
         .eq("user_id", userId);
-
+        
       if (error) throw error;
       return { liked: false, error: null };
     } else {
@@ -176,7 +338,7 @@ export async function likePoem({
         poem_id: poemId,
         user_id: userId,
       });
-
+      
       if (error) throw error;
       return { liked: true, error: null };
     }
@@ -200,7 +362,7 @@ export async function bookmarkPoem({
       .select("*")
       .eq("poem_id", poemId)
       .eq("user_id", userId);
-
+      
     if (existingBookmark && existingBookmark.length > 0) {
       // Already bookmarked, so unbookmark
       const { error } = await supabase
@@ -208,7 +370,7 @@ export async function bookmarkPoem({
         .delete()
         .eq("poem_id", poemId)
         .eq("user_id", userId);
-
+        
       if (error) throw error;
       return { bookmarked: false, error: null };
     } else {
@@ -217,7 +379,7 @@ export async function bookmarkPoem({
         poem_id: poemId,
         user_id: userId,
       });
-
+      
       if (error) throw error;
       return { bookmarked: true, error: null };
     }
@@ -241,14 +403,14 @@ export async function checkUserInteractions({
       .select("*")
       .eq("poem_id", poemId)
       .eq("user_id", userId);
-
+      
     // Check if bookmarked
     const { data: bookmarkData } = await supabase
       .from("bookmarks")
       .select("*")
       .eq("poem_id", poemId)
       .eq("user_id", userId);
-
+      
     return {
       isLiked: likeData && likeData.length > 0,
       isBookmarked: bookmarkData && bookmarkData.length > 0,

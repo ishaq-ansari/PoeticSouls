@@ -12,10 +12,13 @@ import {
   bookmarkPoem,
   checkUserInteractions,
   addComment,
+  getTrendingPoems,
+  getBookmarkedPoems,
+  getUserPoems,
 } from "@/lib/poems";
 
 const Home = () => {
-  const { user, profile } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showCreatePoemModal, setShowCreatePoemModal] = useState(false);
@@ -101,14 +104,30 @@ const Home = () => {
     },
   ];
 
-  // Fetch poems from the API
+  // Fetch poems based on the active tab
   const fetchPoems = async () => {
     setIsLoading(true);
     try {
-      const { poems: fetchedPoems, error } = await getPoems();
+      // Different fetch based on tab
+      let fetchResult;
+      
+      if (activeTab === "feed") {
+        fetchResult = await getPoems();
+      } else if (activeTab === "trending") {
+        fetchResult = await getTrendingPoems();
+      } else if (activeTab === "my-poems" && user) {
+        fetchResult = await getUserPoems(user.id);
+      } else if (activeTab === "bookmarks" && user) {
+        fetchResult = await getBookmarkedPoems(user.id);
+      } else {
+        // Default to all poems
+        fetchResult = await getPoems();
+      }
+
+      const { poems: fetchedPoems, error } = fetchResult;
 
       if (error) {
-        console.error("Error fetching poems:", error);
+        console.error(`Error fetching ${activeTab} poems:`, error);
         setPoems(samplePoems);
         return;
       }
@@ -123,8 +142,8 @@ const Home = () => {
           authorImage: poem.profiles?.avatar_url,
           content: poem.content,
           hashtags: poem.hashtags || [],
-          likes: 0, // We'll need to count these from a separate query
-          comments: 0, // We'll need to count these from a separate query
+          likes: poem.likes_count || 0, // Use the count from the backend
+          comments: poem.comments_count || 0, // Use the count from the backend
           isLiked: false,
           isBookmarked: false,
           createdAt: new Date(poem.created_at).toLocaleDateString("en-US", {
@@ -142,7 +161,7 @@ const Home = () => {
               userId: user.id,
             });
             poem.isLiked = isLiked;
-            poem.isBookmarked = isBookmarked;
+            poem.isBookmarked = isBookmarked || poem.isBookmarked; // Preserve isBookmarked if already set
           }
         }
 
@@ -152,7 +171,7 @@ const Home = () => {
         setPoems(samplePoems);
       }
     } catch (error) {
-      console.error("Error in fetchPoems:", error);
+      console.error(`Error in fetchPoems for ${activeTab}:`, error);
       setPoems(samplePoems);
     } finally {
       setIsLoading(false);
@@ -171,12 +190,10 @@ const Home = () => {
     }
   }, []);
 
-  // Refetch when user auth state changes
+  // Refetch when user auth state or active tab changes
   useEffect(() => {
-    if (user) {
-      fetchPoems();
-    }
-  }, [user]);
+    fetchPoems();
+  }, [user, activeTab]);
 
   const handleThemeToggle = () => {
     const newDarkMode = !isDarkMode;
@@ -189,6 +206,10 @@ const Home = () => {
       document.documentElement.classList.remove("dark");
       localStorage.setItem("darkMode", "false");
     }
+  };
+
+  const handleTabChange = (newTab: string) => {
+    setActiveTab(newTab);
   };
 
   const handlePoemClick = (poemId: string) => {
@@ -323,7 +344,7 @@ const Home = () => {
         userAvatar={profile?.avatar_url || undefined}
         isDarkMode={isDarkMode}
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={handleTabChange}
         onThemeToggle={handleThemeToggle}
         onWritePoemClick={() => {
           if (user) {
@@ -337,9 +358,11 @@ const Home = () => {
           setShowAuthModal(true);
         }}
         onSignOutClick={async () => {
-          await useAuth().signOut();
+          await signOut();
           fetchPoems(); // Refetch poems to update like/bookmark status
         }}
+        onMyPoemsClick={() => setActiveTab("my-poems")}
+        onBookmarksClick={() => setActiveTab("bookmarks")}
       />
 
       <main className="flex-1 container mx-auto py-6 px-4">
