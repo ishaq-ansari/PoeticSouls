@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/tooltip";
 
 interface PoemCardProps {
+  id?: string;
   title?: string;
   author?: string;
   content?: string;
@@ -26,9 +27,16 @@ interface PoemCardProps {
   isLiked?: boolean;
   isBookmarked?: boolean;
   onClick?: () => void;
+  onLike?: () => void;
+  onComment?: () => void;
+  onBookmark?: () => void;
+  onShare?: () => void;
+  isAuthenticated?: boolean;
+  onAuthRequired?: () => void;
 }
 
 const PoemCard = ({
+  id = "1",
   title = "Whispers of Autumn",
   author = "Emily Frost",
   content = "Crimson leaves dance in the wind,\nWhispering secrets of seasons past.\nGolden light filters through branches,\nPainting shadows on the forest floor.",
@@ -38,18 +46,31 @@ const PoemCard = ({
   isLiked = false,
   isBookmarked = false,
   onClick = () => {},
+  onLike = () => {},
+  onComment = () => {},
+  onBookmark = () => {},
+  onShare = () => {},
+  isAuthenticated = false,
+  onAuthRequired = () => {},
 }: PoemCardProps) => {
+  const handleInteraction = (e: React.MouseEvent, callback: () => void) => {
+    e.stopPropagation(); // Prevent triggering the card onClick
+    if (isAuthenticated) {
+      callback();
+    } else {
+      onAuthRequired();
+    }
+  };
+
   return (
-    <Card className="w-full max-w-[550px] h-[320px] flex flex-col bg-white dark:bg-gray-900 hover:shadow-lg transition-shadow duration-300">
+    <Card
+      className="w-full max-w-[550px] h-[320px] flex flex-col bg-white dark:bg-gray-900 hover:shadow-lg transition-shadow duration-300 cursor-pointer"
+      onClick={onClick}
+    >
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
           <div>
-            <CardTitle
-              className="text-xl font-serif cursor-pointer"
-              onClick={onClick}
-            >
-              {title}
-            </CardTitle>
+            <CardTitle className="text-xl font-serif">{title}</CardTitle>
             <CardDescription className="text-sm">by {author}</CardDescription>
           </div>
           <div className="flex space-x-1">
@@ -66,10 +87,7 @@ const PoemCard = ({
       </CardHeader>
 
       <CardContent className="flex-grow overflow-hidden">
-        <p
-          className="text-gray-700 dark:text-gray-300 font-serif whitespace-pre-line line-clamp-5 cursor-pointer"
-          onClick={onClick}
-        >
+        <p className="text-gray-700 dark:text-gray-300 font-serif whitespace-pre-line line-clamp-5">
           {content}
         </p>
       </CardContent>
@@ -83,10 +101,7 @@ const PoemCard = ({
                   variant="ghost"
                   size="sm"
                   className={`p-0 h-auto ${isLiked ? "text-red-500" : "text-gray-500 dark:text-gray-400"}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    console.log("Like button clicked");
-                  }}
+                  onClick={(e) => handleInteraction(e, onLike)}
                 >
                   <Heart
                     className="h-5 w-5 mr-1"
@@ -96,7 +111,7 @@ const PoemCard = ({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Like this poem</p>
+                <p>{isAuthenticated ? "Like this poem" : "Sign in to like"}</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -108,17 +123,18 @@ const PoemCard = ({
                   variant="ghost"
                   size="sm"
                   className="p-0 h-auto text-gray-500 dark:text-gray-400"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    console.log("Comment button clicked");
-                  }}
+                  onClick={(e) => handleInteraction(e, onComment)}
                 >
                   <MessageCircle className="h-5 w-5 mr-1" />
                   <span>{comments}</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Comment on this poem</p>
+                <p>
+                  {isAuthenticated
+                    ? "Comment on this poem"
+                    : "Sign in to comment"}
+                </p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -132,10 +148,7 @@ const PoemCard = ({
                   variant="ghost"
                   size="icon"
                   className={`p-0 h-auto ${isBookmarked ? "text-blue-500" : "text-gray-500 dark:text-gray-400"}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    console.log("Bookmark button clicked");
-                  }}
+                  onClick={(e) => handleInteraction(e, onBookmark)}
                 >
                   <Bookmark
                     className="h-5 w-5"
@@ -144,7 +157,11 @@ const PoemCard = ({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Bookmark this poem</p>
+                <p>
+                  {isAuthenticated
+                    ? "Bookmark this poem"
+                    : "Sign in to bookmark"}
+                </p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -156,16 +173,15 @@ const PoemCard = ({
                   variant="ghost"
                   size="icon"
                   className="p-0 h-auto text-gray-500 dark:text-gray-400"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    console.log("Share button clicked");
-                  }}
+                  onClick={(e) => handleInteraction(e, onShare)}
                 >
                   <Share2 className="h-5 w-5" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Share this poem</p>
+                <p>
+                  {isAuthenticated ? "Share this poem" : "Sign in to share"}
+                </p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

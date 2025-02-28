@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { User, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { User, Mail, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
 
 import {
   Dialog,
@@ -23,6 +23,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { signIn, signUp } from "@/lib/auth";
 
 const signInSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
@@ -47,17 +49,21 @@ interface AuthModalProps {
   onClose?: () => void;
   onSignIn?: (data: z.infer<typeof signInSchema>) => void;
   onSignUp?: (data: z.infer<typeof signUpSchema>) => void;
+  defaultTab?: "signIn" | "signUp";
 }
 
 const AuthModal = ({
   isOpen = true,
   onClose = () => {},
-  onSignIn = () => {},
-  onSignUp = () => {},
+  onSignIn,
+  onSignUp,
+  defaultTab = "signIn",
 }: AuthModalProps) => {
-  const [activeTab, setActiveTab] = useState<"signIn" | "signUp">("signIn");
+  const [activeTab, setActiveTab] = useState<"signIn" | "signUp">(defaultTab);
   const [showPassword, setShowPassword] = useState(false);
   const [useRealName, setUseRealName] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const signInForm = useForm<z.infer<typeof signInSchema>>({
     resolver: zodResolver(signInSchema),
@@ -77,12 +83,61 @@ const AuthModal = ({
     },
   });
 
-  const handleSignIn = (data: z.infer<typeof signInSchema>) => {
-    onSignIn(data);
+  const handleSignIn = async (data: z.infer<typeof signInSchema>) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const result = await signIn(data);
+
+      if (result.error) {
+        setError("Invalid email or password. Please try again.");
+        return;
+      }
+
+      if (onSignIn) {
+        onSignIn(data);
+      }
+      onClose();
+    } catch (err) {
+      setError("An unexpected error occurred. Please try again.");
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleSignUp = (data: z.infer<typeof signUpSchema>) => {
-    onSignUp({ ...data, useRealName });
+  const handleSignUp = async (data: z.infer<typeof signUpSchema>) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const result = await signUp({
+        ...data,
+        useRealName,
+      });
+
+      if (result.error) {
+        if (result.error.message?.includes("already registered")) {
+          setError("This email is already registered. Please sign in instead.");
+          setActiveTab("signIn");
+          signInForm.setValue("email", data.email);
+        } else {
+          setError("Failed to create account. Please try again.");
+        }
+        return;
+      }
+
+      if (onSignUp) {
+        onSignUp({ ...data, useRealName });
+      }
+      onClose();
+    } catch (err) {
+      setError("An unexpected error occurred. Please try again.");
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const togglePasswordVisibility = () => {
@@ -106,10 +161,20 @@ const AuthModal = ({
           </DialogDescription>
         </DialogHeader>
 
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
         <Tabs
-          defaultValue="signIn"
+          defaultValue={defaultTab}
           value={activeTab}
-          onValueChange={(value) => setActiveTab(value as "signIn" | "signUp")}
+          onValueChange={(value) => {
+            setActiveTab(value as "signIn" | "signUp");
+            setError(null);
+          }}
           className="w-full"
         >
           <TabsList className="grid w-full grid-cols-2 mb-6">
@@ -135,6 +200,7 @@ const AuthModal = ({
                           <Input
                             placeholder="your.email@example.com"
                             className="pl-10"
+                            disabled={isLoading}
                             {...field}
                           />
                         </FormControl>
@@ -157,6 +223,7 @@ const AuthModal = ({
                             type={showPassword ? "text" : "password"}
                             placeholder="••••••••"
                             className="pl-10"
+                            disabled={isLoading}
                             {...field}
                           />
                         </FormControl>
@@ -166,6 +233,7 @@ const AuthModal = ({
                           size="icon"
                           className="absolute right-1 top-1 h-7 w-7"
                           onClick={togglePasswordVisibility}
+                          disabled={isLoading}
                         >
                           {showPassword ? (
                             <EyeOff className="h-4 w-4" />
@@ -179,8 +247,8 @@ const AuthModal = ({
                   )}
                 />
 
-                <Button type="submit" className="w-full">
-                  Sign In
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Signing In..." : "Sign In"}
                 </Button>
               </form>
             </Form>
@@ -202,6 +270,7 @@ const AuthModal = ({
                         size="sm"
                         onClick={toggleNameType}
                         className="text-xs h-7 px-2"
+                        disabled={isLoading}
                       >
                         Real Name
                       </Button>
@@ -211,6 +280,7 @@ const AuthModal = ({
                         size="sm"
                         onClick={toggleNameType}
                         className="text-xs h-7 px-2"
+                        disabled={isLoading}
                       >
                         Pseudonym
                       </Button>
@@ -230,6 +300,7 @@ const AuthModal = ({
                                 useRealName ? "Your Name" : "Your Pseudonym"
                               }
                               className="pl-10"
+                              disabled={isLoading}
                               {...field}
                             />
                           </FormControl>
@@ -252,6 +323,7 @@ const AuthModal = ({
                           <Input
                             placeholder="your.email@example.com"
                             className="pl-10"
+                            disabled={isLoading}
                             {...field}
                           />
                         </FormControl>
@@ -274,6 +346,7 @@ const AuthModal = ({
                             type={showPassword ? "text" : "password"}
                             placeholder="••••••••"
                             className="pl-10"
+                            disabled={isLoading}
                             {...field}
                           />
                         </FormControl>
@@ -283,6 +356,7 @@ const AuthModal = ({
                           size="icon"
                           className="absolute right-1 top-1 h-7 w-7"
                           onClick={togglePasswordVisibility}
+                          disabled={isLoading}
                         >
                           {showPassword ? (
                             <EyeOff className="h-4 w-4" />
@@ -296,8 +370,8 @@ const AuthModal = ({
                   )}
                 />
 
-                <Button type="submit" className="w-full">
-                  Create Account
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Creating Account..." : "Create Account"}
                 </Button>
               </form>
             </Form>

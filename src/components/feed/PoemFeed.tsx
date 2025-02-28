@@ -20,6 +20,12 @@ interface PoemFeedProps {
   hasMore?: boolean;
   onLoadMore?: () => void;
   onPoemClick?: (poemId: string) => void;
+  onLike?: (poemId: string) => void;
+  onComment?: (poemId: string) => void;
+  onBookmark?: (poemId: string) => void;
+  onShare?: (poemId: string) => void;
+  isAuthenticated?: boolean;
+  onAuthRequired?: () => void;
 }
 
 const PoemFeed = ({
@@ -65,10 +71,21 @@ const PoemFeed = ({
   hasMore = true,
   onLoadMore = () => {},
   onPoemClick = () => {},
+  onLike = () => {},
+  onComment = () => {},
+  onBookmark = () => {},
+  onShare = () => {},
+  isAuthenticated = false,
+  onAuthRequired = () => {},
 }: PoemFeedProps) => {
   const [loading, setLoading] = useState(isLoading);
   const observer = useRef<IntersectionObserver | null>(null);
   const loadingRef = useRef<HTMLDivElement>(null);
+
+  // Update loading state when isLoading prop changes
+  useEffect(() => {
+    setLoading(isLoading);
+  }, [isLoading]);
 
   // Function to handle intersection with the loading element
   const handleObserver = useCallback(
@@ -113,6 +130,7 @@ const PoemFeed = ({
         {poems.map((poem) => (
           <PoemCard
             key={poem.id}
+            id={poem.id}
             title={poem.title}
             author={poem.author}
             content={poem.content}
@@ -122,6 +140,12 @@ const PoemFeed = ({
             isLiked={poem.isLiked}
             isBookmarked={poem.isBookmarked}
             onClick={() => onPoemClick(poem.id)}
+            onLike={() => onLike(poem.id)}
+            onComment={() => onComment(poem.id)}
+            onBookmark={() => onBookmark(poem.id)}
+            onShare={() => onShare(poem.id)}
+            isAuthenticated={isAuthenticated}
+            onAuthRequired={onAuthRequired}
           />
         ))}
       </div>

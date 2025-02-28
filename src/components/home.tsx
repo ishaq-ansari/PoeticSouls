@@ -1,20 +1,32 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Header from "./layout/Header";
 import PoemFeed from "./feed/PoemFeed";
 import AuthModal from "./auth/AuthModal";
 import CreatePoemModal from "./poem/CreatePoemModal";
 import PoemDetailModal from "./poem/PoemDetailModal";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  getPoems,
+  createPoem,
+  likePoem,
+  bookmarkPoem,
+  checkUserInteractions,
+  addComment,
+} from "@/lib/poems";
 
 const Home = () => {
+  const { user, profile } = useAuth();
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showCreatePoemModal, setShowCreatePoemModal] = useState(false);
   const [showPoemDetailModal, setShowPoemDetailModal] = useState(false);
   const [selectedPoemId, setSelectedPoemId] = useState<string | null>(null);
+  const [poems, setPoems] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("feed");
 
-  // Sample poems data
-  const poems = [
+  // Sample poems data as fallback
+  const samplePoems = [
     {
       id: "1",
       title: "Whispers of Autumn",
@@ -89,26 +101,94 @@ const Home = () => {
     },
   ];
 
-  const handleThemeToggle = () => {
-    setIsDarkMode(!isDarkMode);
-    // Apply dark mode to document
-    if (!isDarkMode) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
+  // Fetch poems from the API
+  const fetchPoems = async () => {
+    setIsLoading(true);
+    try {
+      const { poems: fetchedPoems, error } = await getPoems();
+
+      if (error) {
+        console.error("Error fetching poems:", error);
+        setPoems(samplePoems);
+        return;
+      }
+
+      if (fetchedPoems && fetchedPoems.length > 0) {
+        // Transform the data to match our component's expected format
+        const transformedPoems = fetchedPoems.map((poem: any) => ({
+          id: poem.id,
+          title: poem.title,
+          author: poem.profiles?.display_name || "Unknown Author",
+          authorId: poem.author_id,
+          authorImage: poem.profiles?.avatar_url,
+          content: poem.content,
+          hashtags: poem.hashtags || [],
+          likes: 0, // We'll need to count these from a separate query
+          comments: 0, // We'll need to count these from a separate query
+          isLiked: false,
+          isBookmarked: false,
+          createdAt: new Date(poem.created_at).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          }),
+        }));
+
+        // If user is logged in, check which poems they've liked/bookmarked
+        if (user) {
+          for (const poem of transformedPoems) {
+            const { isLiked, isBookmarked } = await checkUserInteractions({
+              poemId: poem.id,
+              userId: user.id,
+            });
+            poem.isLiked = isLiked;
+            poem.isBookmarked = isBookmarked;
+          }
+        }
+
+        setPoems(transformedPoems);
+      } else {
+        // If no poems were found, use the sample data
+        setPoems(samplePoems);
+      }
+    } catch (error) {
+      console.error("Error in fetchPoems:", error);
+      setPoems(samplePoems);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleSignIn = (data: any) => {
-    console.log("Sign in data:", data);
-    setIsAuthenticated(true);
-    setShowAuthModal(false);
-  };
+  // Initial data fetch
+  useEffect(() => {
+    fetchPoems();
 
-  const handleSignUp = (data: any) => {
-    console.log("Sign up data:", data);
-    setIsAuthenticated(true);
-    setShowAuthModal(false);
+    // Check for dark mode preference
+    const isDark = localStorage.getItem("darkMode") === "true";
+    setIsDarkMode(isDark);
+    if (isDark) {
+      document.documentElement.classList.add("dark");
+    }
+  }, []);
+
+  // Refetch when user auth state changes
+  useEffect(() => {
+    if (user) {
+      fetchPoems();
+    }
+  }, [user]);
+
+  const handleThemeToggle = () => {
+    const newDarkMode = !isDarkMode;
+    setIsDarkMode(newDarkMode);
+    // Apply dark mode to document and save preference
+    if (newDarkMode) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("darkMode", "true");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("darkMode", "false");
+    }
   };
 
   const handlePoemClick = (poemId: string) => {
@@ -116,10 +196,120 @@ const Home = () => {
     setShowPoemDetailModal(true);
   };
 
-  const handleCreatePoemSubmit = (poemData: any) => {
-    console.log("New poem data:", poemData);
-    // Here you would typically send the data to your backend
-    setShowCreatePoemModal(false);
+  const handleCreatePoemSubmit = async (poemData: any) => {
+    if (!user) return;
+
+    try {
+      const { poem, error } = await createPoem({
+        title: poemData.title,
+        content: poemData.content,
+        hashtags: poemData.hashtags,
+        authorId: user.id,
+      });
+
+      if (error) {
+        console.error("Error creating poem:", error);
+        return;
+      }
+
+      if (poem) {
+        // Add the new poem to the list
+        const newPoem = {
+          id: poem.id,
+          title: poem.title,
+          author: profile?.display_name || "You",
+          authorId: poem.author_id,
+          authorImage: profile?.avatar_url,
+          content: poem.content,
+          hashtags: poem.hashtags || [],
+          likes: 0,
+          comments: 0,
+          isLiked: false,
+          isBookmarked: false,
+          createdAt: new Date(poem.created_at).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          }),
+        };
+
+        setPoems([newPoem, ...poems]);
+      }
+    } catch (error) {
+      console.error("Error in handleCreatePoemSubmit:", error);
+    } finally {
+      setShowCreatePoemModal(false);
+    }
+  };
+
+  const handleLike = async (poemId: string, liked: boolean) => {
+    if (!user) return;
+
+    try {
+      await likePoem({ poemId, userId: user.id });
+
+      // Update the poems state
+      setPoems(
+        poems.map((poem) => {
+          if (poem.id === poemId) {
+            return {
+              ...poem,
+              isLiked: liked,
+              likes: liked ? poem.likes + 1 : poem.likes - 1,
+            };
+          }
+          return poem;
+        }),
+      );
+    } catch (error) {
+      console.error("Error liking poem:", error);
+    }
+  };
+
+  const handleBookmark = async (poemId: string, bookmarked: boolean) => {
+    if (!user) return;
+
+    try {
+      await bookmarkPoem({ poemId, userId: user.id });
+
+      // Update the poems state
+      setPoems(
+        poems.map((poem) => {
+          if (poem.id === poemId) {
+            return {
+              ...poem,
+              isBookmarked: bookmarked,
+            };
+          }
+          return poem;
+        }),
+      );
+    } catch (error) {
+      console.error("Error bookmarking poem:", error);
+    }
+  };
+
+  const handleComment = async (poemId: string, content: string) => {
+    if (!user) return;
+
+    try {
+      await addComment({ poemId, userId: user.id, content });
+
+      // Update the poems state
+      setPoems(
+        poems.map((poem) => {
+          if (poem.id === poemId) {
+            return {
+              ...poem,
+              comments: poem.comments + 1,
+            };
+          }
+          return poem;
+        }),
+      );
+    } catch (error) {
+      console.error("Error adding comment:", error);
+    }
   };
 
   // Find the selected poem for the detail modal
@@ -128,12 +318,15 @@ const Home = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
       <Header
-        isAuthenticated={isAuthenticated}
-        username={isAuthenticated ? "Jane Poet" : "Guest"}
+        isAuthenticated={!!user}
+        username={profile?.display_name || "Guest"}
+        userAvatar={profile?.avatar_url || undefined}
         isDarkMode={isDarkMode}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
         onThemeToggle={handleThemeToggle}
         onWritePoemClick={() => {
-          if (isAuthenticated) {
+          if (user) {
             setShowCreatePoemModal(true);
           } else {
             setShowAuthModal(true);
@@ -142,15 +335,21 @@ const Home = () => {
         onSignInClick={() => setShowAuthModal(true)}
         onSignUpClick={() => {
           setShowAuthModal(true);
-          // You could set a state to show the sign-up tab by default
+        }}
+        onSignOutClick={async () => {
+          await useAuth().signOut();
+          fetchPoems(); // Refetch poems to update like/bookmark status
         }}
       />
 
       <main className="flex-1 container mx-auto py-6 px-4">
         <PoemFeed
           poems={poems}
+          isLoading={isLoading}
           onPoemClick={handlePoemClick}
-          hasMore={false} // Set to true if you have pagination
+          hasMore={false}
+          isAuthenticated={!!user}
+          onAuthRequired={() => setShowAuthModal(true)}
         />
       </main>
 
@@ -158,8 +357,6 @@ const Home = () => {
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
-        onSignIn={handleSignIn}
-        onSignUp={handleSignUp}
       />
 
       {/* Create Poem Modal */}
@@ -172,15 +369,22 @@ const Home = () => {
       {/* Poem Detail Modal */}
       {selectedPoem && (
         <PoemDetailModal
+          id={selectedPoem.id}
           open={showPoemDetailModal}
           onOpenChange={setShowPoemDetailModal}
           title={selectedPoem.title}
           author={selectedPoem.author}
+          authorId={selectedPoem.authorId}
+          authorImage={selectedPoem.authorImage}
           content={selectedPoem.content}
           hashtags={selectedPoem.hashtags}
           likes={selectedPoem.likes}
           isLiked={selectedPoem.isLiked}
           isBookmarked={selectedPoem.isBookmarked}
+          createdAt={selectedPoem.createdAt}
+          onLike={handleLike}
+          onBookmark={handleBookmark}
+          onComment={handleComment}
         />
       )}
     </div>
