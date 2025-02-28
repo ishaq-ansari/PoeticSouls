@@ -63,6 +63,7 @@ const AuthModal = ({
   const [showPassword, setShowPassword] = useState(false);
   const [useRealName, setUseRealName] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const signInForm = useForm<z.infer<typeof signInSchema>>({
@@ -86,12 +87,13 @@ const AuthModal = ({
   const handleSignIn = async (data: z.infer<typeof signInSchema>) => {
     setIsLoading(true);
     setError(null);
+    setSuccess(null);
 
     try {
       const result = await signIn(data);
 
       if (result.error) {
-        setError("Invalid email or password. Please try again.");
+        setError(result.error.message || "Invalid email or password. Please try again.");
         return;
       }
 
@@ -110,6 +112,7 @@ const AuthModal = ({
   const handleSignUp = async (data: z.infer<typeof signUpSchema>) => {
     setIsLoading(true);
     setError(null);
+    setSuccess(null);
 
     try {
       const result = await signUp({
@@ -118,23 +121,47 @@ const AuthModal = ({
       });
 
       if (result.error) {
+        console.error("Signup error details:", result.error);
+        
+        // Check if this is a "confirmation required" message
+        if (result.error.message?.includes("check your email")) {
+          setSuccess(result.error.message);
+          // Optionally switch to sign-in tab after account creation
+          setActiveTab("signIn");
+          signInForm.setValue("email", data.email);
+          setIsLoading(false);
+          return;
+        }
+        
+        // Handle email already registered
         if (result.error.message?.includes("already registered")) {
           setError("This email is already registered. Please sign in instead.");
           setActiveTab("signIn");
           signInForm.setValue("email", data.email);
+          return;
         } else {
-          setError("Failed to create account. Please try again.");
+          setError(result.error.message || "Failed to create account. Please try again.");
+          return;
         }
-        return;
       }
 
-      if (onSignUp) {
-        onSignUp({ ...data, useRealName });
+      // If we have auto-confirmation enabled, directly log in
+      if (result.data?.session) {
+        setSuccess("Account created successfully!");
+        
+        if (onSignUp) {
+          onSignUp({ ...data, useRealName });
+        }
+        onClose();
+      } else {
+        // No session means email confirmation is likely required
+        setSuccess("Account created! Please check your email to confirm your account before signing in.");
+        setActiveTab("signIn");
+        signInForm.setValue("email", data.email);
       }
-      onClose();
     } catch (err) {
+      console.error("Unexpected error during signup:", err);
       setError("An unexpected error occurred. Please try again.");
-      console.error(err);
     } finally {
       setIsLoading(false);
     }
@@ -168,12 +195,20 @@ const AuthModal = ({
           </Alert>
         )}
 
+        {success && (
+          <Alert variant="default" className="mb-4 bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800">
+            <AlertCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+            <AlertDescription className="text-green-600 dark:text-green-400">{success}</AlertDescription>
+          </Alert>
+        )}
+
         <Tabs
           defaultValue={defaultTab}
           value={activeTab}
           onValueChange={(value) => {
             setActiveTab(value as "signIn" | "signUp");
             setError(null);
+            setSuccess(null);
           }}
           className="w-full"
         >

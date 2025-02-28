@@ -19,29 +19,47 @@ export async function signUp({
   useRealName: boolean;
 }) {
   try {
-    const { data, error } = await supabase.auth.signUp({
+    // Create the user account with metadata for the trigger function
+    const { data, error: authError } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        emailRedirectTo: window.location.origin,
+        data: {
+          // Include user metadata for the database trigger
+          display_name: displayName,
+          use_real_name: useRealName,
+          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`
+        }
+      }
     });
 
-    if (error) throw error;
-
-    if (data.user) {
-      // Create a profile for the user
-      const { error: profileError } = await supabase.from("profiles").insert({
-        id: data.user.id,
-        display_name: displayName,
-        avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`,
-        use_real_name: useRealName,
-      });
-
-      if (profileError) throw profileError;
+    if (authError) {
+      console.error("Auth error during signup:", authError);
+      return { data: null, error: authError };
     }
 
+    // For auto-confirmation enabled projects, sign in the user immediately
+    if (data?.user && !data.user.email_confirmed_at && !data.session) {
+      // If the user was created but there's no session, it means email confirmation is required
+      return { 
+        data, 
+        error: {
+          message: "Account created! Please check your email to confirm your account before signing in."
+        } 
+      };
+    }
+
+    // The profile will be created automatically by the database trigger
     return { data, error: null };
   } catch (error) {
     console.error("Error signing up:", error);
-    return { data: null, error };
+    return { 
+      data: null, 
+      error: {
+        message: `Signup failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      }
+    };
   }
 }
 
@@ -53,12 +71,27 @@ export async function signIn({
   password: string;
 }) {
   try {
+    // Attempt to sign in
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    if (error) throw error;
+    if (error) {
+      console.error("Sign in error:", error);
+      
+      // For better user experience, provide a clearer message
+      if (error.message?.includes("Invalid login credentials")) {
+        return { 
+          data: null, 
+          error: { 
+            message: "Invalid email or password. If you just created your account, make sure to check your email for verification." 
+          } 
+        };
+      }
+      
+      return { data: null, error };
+    }
 
     return { data, error: null };
   } catch (error) {

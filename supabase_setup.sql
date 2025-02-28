@@ -52,89 +52,89 @@ CREATE TABLE IF NOT EXISTS public.comments (
 -- Profiles table policies
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY Public profiles are viewable by everyone.
+CREATE POLICY "Public profiles are viewable by everyone."
   ON public.profiles FOR SELECT
   USING (true);
 
-CREATE POLICY Users can insert their own profile.
+CREATE POLICY "Users can insert their own profile."
   ON public.profiles FOR INSERT
   WITH CHECK (auth.uid() = id);
 
-CREATE POLICY Users can update their own profile.
+CREATE POLICY "Users can update their own profile."
   ON public.profiles FOR UPDATE
   USING (auth.uid() = id);
 
 -- Poems table policies
 ALTER TABLE public.poems ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY Poems are viewable by everyone.
+CREATE POLICY "Poems are viewable by everyone."
   ON public.poems FOR SELECT
   USING (true);
 
-CREATE POLICY Users can insert their own poems.
+CREATE POLICY "Users can insert their own poems."
   ON public.poems FOR INSERT
   WITH CHECK (auth.uid() = author_id);
 
-CREATE POLICY Users can update their own poems.
+CREATE POLICY "Users can update their own poems."
   ON public.poems FOR UPDATE
   USING (auth.uid() = author_id);
 
-CREATE POLICY Users can delete their own poems.
+CREATE POLICY "Users can delete their own poems."
   ON public.poems FOR DELETE
   USING (auth.uid() = author_id);
 
 -- Likes table policies
 ALTER TABLE public.likes ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY Likes are viewable by everyone.
+CREATE POLICY "Likes are viewable by everyone."
   ON public.likes FOR SELECT
   USING (true);
 
-CREATE POLICY Users can insert their own likes.
+CREATE POLICY "Users can insert their own likes."
   ON public.likes FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY Users can delete their own likes.
+CREATE POLICY "Users can delete their own likes."
   ON public.likes FOR DELETE
   USING (auth.uid() = user_id);
 
 -- Bookmarks table policies
 ALTER TABLE public.bookmarks ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY Bookmarks are viewable by the user who created them.
+CREATE POLICY "Bookmarks are viewable by the user who created them."
   ON public.bookmarks FOR SELECT
   USING (auth.uid() = user_id);
 
-CREATE POLICY Users can insert their own bookmarks.
+CREATE POLICY "Users can insert their own bookmarks."
   ON public.bookmarks FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY Users can delete their own bookmarks.
+CREATE POLICY "Users can delete their own bookmarks."
   ON public.bookmarks FOR DELETE
   USING (auth.uid() = user_id);
 
 -- Comments table policies
 ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY Comments are viewable by everyone.
+CREATE POLICY "Comments are viewable by everyone."
   ON public.comments FOR SELECT
   USING (true);
 
-CREATE POLICY Users can insert their own comments.
+CREATE POLICY "Users can insert their own comments."
   ON public.comments FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY Users can update their own comments.
+CREATE POLICY "Users can update their own comments."
   ON public.comments FOR UPDATE
   USING (auth.uid() = user_id);
 
-CREATE POLICY Users can delete their own comments.
+CREATE POLICY "Users can delete their own comments."
   ON public.comments FOR DELETE
   USING (auth.uid() = user_id);
 
 -- Create function to handle new user signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS 267
+RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO public.profiles (id, display_name, avatar_url)
   VALUES (
@@ -144,7 +144,8 @@ BEGIN
   );
   RETURN NEW;
 END;
-267 LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 
 -- Trigger the function every time a user is created
 CREATE OR REPLACE TRIGGER on_auth_user_created
