@@ -8,6 +8,7 @@ import {
   Send,
   ChevronDown,
   ChevronUp,
+  Loader2,
 } from "lucide-react";
 import {
   Dialog,
@@ -33,10 +34,18 @@ import AuthModal from "@/components/auth/AuthModal";
 
 interface Comment {
   id: string;
-  author: string;
-  authorImage?: string;
+  user_id?: string;
+  profiles?: {
+    display_name: string;
+    avatar_url?: string;
+  };
   content: string;
-  timestamp: string;
+  created_at: string;
+  
+  // For backward compatibility with sample data
+  author?: string;
+  authorImage?: string;
+  timestamp?: string;
 }
 
 interface PoemDetailModalProps {
@@ -51,13 +60,15 @@ interface PoemDetailModalProps {
   hashtags?: string[];
   likes?: number;
   comments?: Comment[];
+  isLoadingComments?: boolean;
   isLiked?: boolean;
   isBookmarked?: boolean;
   createdAt?: string;
-  onLike?: (id: string, liked: boolean) => void;
-  onBookmark?: (id: string, bookmarked: boolean) => void;
-  onComment?: (id: string, content: string) => void;
-  onShare?: (id: string) => void;
+  onLike?: () => void;
+  onBookmark?: () => void;
+  onComment?: (content: string) => void;
+  onShare?: () => void;
+  onAuthorClick?: () => void;
 }
 
 const PoemDetailModal = ({
@@ -71,32 +82,8 @@ const PoemDetailModal = ({
   content = "Crimson leaves dance in the wind,\nWhispering secrets of seasons past.\nGolden light filters through branches,\nPainting shadows on the forest floor.\n\nThe scent of earth and rain mingles,\nA sweet reminder of summer's farewell.\nFootsteps crunch on fallen memories,\nAs nature prepares for winter's embrace.",
   hashtags = ["nature", "autumn", "reflection"],
   likes = 42,
-  comments = [
-    {
-      id: "1",
-      author: "Alex Rivera",
-      authorImage: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex",
-      content:
-        "This perfectly captures the essence of autumn. Beautiful imagery!",
-      timestamp: "2 days ago",
-    },
-    {
-      id: "2",
-      author: "Jordan Lee",
-      authorImage: "https://api.dicebear.com/7.x/avataaars/svg?seed=Jordan",
-      content:
-        "The line about footsteps crunching on fallen memories really resonated with me.",
-      timestamp: "1 day ago",
-    },
-    {
-      id: "3",
-      author: "Taylor Kim",
-      authorImage: "https://api.dicebear.com/7.x/avataaars/svg?seed=Taylor",
-      content:
-        "I love how you've captured both the visual and sensory experience of autumn.",
-      timestamp: "12 hours ago",
-    },
-  ],
+  comments = [],
+  isLoadingComments = false,
   isLiked = false,
   isBookmarked = false,
   createdAt = "October 15, 2023",
@@ -104,82 +91,133 @@ const PoemDetailModal = ({
   onBookmark = () => {},
   onComment = () => {},
   onShare = () => {},
+  onAuthorClick = () => {},
 }: PoemDetailModalProps) => {
   const { user, profile } = useAuth();
   const [newComment, setNewComment] = useState("");
-  const [localComments, setLocalComments] = useState<Comment[]>(comments);
-  const [localLikes, setLocalLikes] = useState(likes);
-  const [localIsLiked, setLocalIsLiked] = useState(isLiked);
-  const [localIsBookmarked, setLocalIsBookmarked] = useState(isBookmarked);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showAllComments, setShowAllComments] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-
-  // Display only the 3 most recent comments when collapsed
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Sample fallback comments in case API returns empty
+  const fallbackComments = [
+    {
+      id: "1",
+      author: "Alex Rivera",
+      authorImage: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex",
+      content: "This perfectly captures the essence of autumn. Beautiful imagery!",
+      timestamp: "2 days ago",
+    },
+    {
+      id: "2",
+      author: "Jordan Lee",
+      authorImage: "https://api.dicebear.com/7.x/avataaars/svg?seed=Jordan",
+      content: "The line about footsteps crunching on fallen memories really resonated with me.",
+      timestamp: "1 day ago",
+    },
+    {
+      id: "3",
+      author: "Taylor Kim",
+      authorImage: "https://api.dicebear.com/7.x/avataaars/svg?seed=Taylor",
+      content: "I love how you've captured both the visual and sensory experience of autumn.",
+      timestamp: "12 hours ago",
+    },
+  ];
+  
+  // Format DB comments to display properly
+  const formattedComments = comments && comments.length > 0
+    ? comments.map(comment => ({
+        id: comment.id,
+        author: comment.profiles?.display_name || comment.author || "Unknown User",
+        authorImage: comment.profiles?.avatar_url || comment.authorImage || 
+          `https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.profiles?.display_name || "User"}`,
+        content: comment.content,
+        timestamp: comment.timestamp || formatDate(comment.created_at),
+      }))
+    : fallbackComments;
+  
+  // Show only 3 comments at first, Facebook-style
+  const MAX_VISIBLE_COMMENTS = 3;
+  
+  // Display only the most recent comments when collapsed
   const visibleComments = showAllComments
-    ? localComments
-    : localComments.slice(Math.max(0, localComments.length - 3));
+    ? formattedComments
+    : formattedComments.slice(0, MAX_VISIBLE_COMMENTS);
+    
+  // Determine if we need a "View more comments" button
+  const hasMoreComments = formattedComments.length > MAX_VISIBLE_COMMENTS;
+  const hiddenCommentsCount = formattedComments.length - MAX_VISIBLE_COMMENTS;
 
+  function formatDate(dateString: string): string {
+    if (!dateString) return "Unknown date";
+    
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    
+    // Convert to seconds, minutes, hours, days
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHours = Math.floor(diffMin / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffDays > 30) {
+      return date.toLocaleDateString();
+    } else if (diffDays > 0) {
+      return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    } else if (diffHours > 0) {
+      return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    } else if (diffMin > 0) {
+      return `${diffMin} minute${diffMin > 1 ? 's' : ''} ago`;
+    } else {
+      return 'Just now';
+    }
+  }
+  
   const handleLike = () => {
     if (!user) {
       setShowAuthModal(true);
       return;
     }
-
-    setLocalIsLiked(!localIsLiked);
-    setLocalLikes(localIsLiked ? localLikes - 1 : localLikes + 1);
-    onLike(id, !localIsLiked);
+    onLike();
   };
-
+  
   const handleBookmark = () => {
     if (!user) {
       setShowAuthModal(true);
       return;
     }
-
-    setLocalIsBookmarked(!localIsBookmarked);
-    onBookmark(id, !localIsBookmarked);
+    onBookmark();
   };
-
-  const handleCommentSubmit = () => {
+  
+  const handleCommentSubmit = async () => {
     if (!user) {
       setShowAuthModal(true);
       return;
     }
-
+    
     if (newComment.trim()) {
-      setIsLoading(true);
-
-      // Create a temporary comment to show immediately
-      const tempComment: Comment = {
-        id: `temp-${Date.now()}`,
-        author: profile?.display_name || "You",
-        authorImage:
-          profile?.avatar_url ||
-          `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile?.display_name || "You"}`,
-        content: newComment,
-        timestamp: "Just now",
-      };
-
-      setLocalComments([...localComments, tempComment]);
-
-      // Call the API to save the comment
-      onComment(id, newComment);
-
-      // Clear the input
-      setNewComment("");
-      setIsLoading(false);
+      setIsSubmitting(true);
+      try {
+        await onComment(newComment);
+        // Clear the input after successful submission
+        setNewComment("");
+        // When adding a comment, make sure all comments are visible
+        setShowAllComments(true);
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
-
+  
   const handleShare = () => {
     if (!user) {
       setShowAuthModal(true);
       return;
     }
-    onShare(id);
+    onShare?.();
   };
-
+  
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -191,14 +229,19 @@ const PoemDetailModal = ({
                   {title}
                 </DialogTitle>
                 <DialogDescription className="flex items-center mt-1">
-                  <Avatar className="h-6 w-6 mr-2">
-                    {authorImage ? (
-                      <AvatarImage src={authorImage} alt={author} />
-                    ) : (
-                      <AvatarFallback>{author[0]}</AvatarFallback>
-                    )}
-                  </Avatar>
-                  <span>{author}</span>
+                  <button 
+                    onClick={onAuthorClick}
+                    className="flex items-center hover:underline focus:outline-none"
+                  >
+                    <Avatar className="h-6 w-6 mr-2">
+                      {authorImage ? (
+                        <AvatarImage src={authorImage} alt={author} />
+                      ) : (
+                        <AvatarFallback>{author[0]}</AvatarFallback>
+                      )}
+                    </Avatar>
+                    <span>{author}</span>
+                  </button>
                   <span className="mx-2">•</span>
                   <span className="text-sm text-muted-foreground">
                     {createdAt}
@@ -217,7 +260,6 @@ const PoemDetailModal = ({
               </div>
             </div>
           </DialogHeader>
-
           <ScrollArea className="flex-grow">
             <div className="p-4 pt-0">
               <div className="my-4">
@@ -225,63 +267,79 @@ const PoemDetailModal = ({
                   {content}
                 </p>
               </div>
-
               <Separator className="my-6" />
-
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-medium">
-                    Comments ({localComments.length})
+                    Comments ({formattedComments.length})
                   </h3>
-                  {localComments.length > 3 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowAllComments(!showAllComments)}
-                      className="flex items-center gap-1 text-sm"
-                    >
-                      {showAllComments ? (
-                        <>
-                          <ChevronUp className="h-4 w-4" /> Show Less
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown className="h-4 w-4" /> Show All
-                        </>
-                      )}
-                    </Button>
-                  )}
                 </div>
-
-                <div className="space-y-4">
-                  {visibleComments.map((comment) => (
-                    <div key={comment.id} className="flex space-x-3">
-                      <Avatar className="h-8 w-8">
-                        {comment.authorImage ? (
-                          <AvatarImage
-                            src={comment.authorImage}
-                            alt={comment.author}
-                          />
-                        ) : (
-                          <AvatarFallback>{comment.author[0]}</AvatarFallback>
-                        )}
-                      </Avatar>
-                      <div className="flex-1">
-                        <div className="flex justify-between">
-                          <p className="font-medium">{comment.author}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {comment.timestamp}
-                          </p>
+                
+                {isLoadingComments ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin" />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* "View more comments" button if there are more than 3 comments */}
+                    {hasMoreComments && !showAllComments && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowAllComments(true)}
+                        className="flex items-center gap-1 text-sm text-muted-foreground w-full justify-start"
+                      >
+                        <ChevronDown className="h-4 w-4" /> 
+                        View {hiddenCommentsCount} more comment{hiddenCommentsCount !== 1 ? 's' : ''}
+                      </Button>
+                    )}
+                    
+                    {visibleComments.length === 0 ? (
+                      <p className="text-center text-gray-500 py-4">
+                        No comments yet. Be the first to share your thoughts!
+                      </p>
+                    ) : (
+                      visibleComments.map((comment) => (
+                        <div key={comment.id} className="flex space-x-3">
+                          <Avatar className="h-8 w-8">
+                            {comment.authorImage ? (
+                              <AvatarImage
+                                src={comment.authorImage}
+                                alt={comment.author}
+                              />
+                            ) : (
+                              <AvatarFallback>{comment.author[0]}</AvatarFallback>
+                            )}
+                          </Avatar>
+                          <div className="flex-1 bg-gray-50 dark:bg-gray-800 rounded-lg p-2">
+                            <div className="flex justify-between">
+                              <p className="font-medium text-sm">{comment.author}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {comment.timestamp}
+                              </p>
+                            </div>
+                            <p className="text-sm mt-1">{comment.content}</p>
+                          </div>
                         </div>
-                        <p className="text-sm mt-1">{comment.content}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                      ))
+                    )}
+                    
+                    {/* "Show less" button if showing all comments */}
+                    {hasMoreComments && showAllComments && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowAllComments(false)}
+                        className="flex items-center gap-1 text-sm text-muted-foreground w-full justify-start"
+                      >
+                        <ChevronUp className="h-4 w-4" /> Show fewer comments
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </ScrollArea>
-
           <div className="border-t p-4">
             {user ? (
               <div className="flex space-x-2">
@@ -303,15 +361,25 @@ const PoemDetailModal = ({
                     onChange={(e) => setNewComment(e.target.value)}
                     placeholder="Add a comment..."
                     className="flex-1 resize-none min-h-[40px] h-[40px]"
-                    disabled={isLoading}
+                    disabled={isSubmitting}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleCommentSubmit();
+                      }
+                    }}
                   />
                   <Button
                     size="icon"
                     className="ml-2"
-                    disabled={!newComment.trim() || isLoading}
+                    disabled={!newComment.trim() || isSubmitting}
                     onClick={handleCommentSubmit}
                   >
-                    <Send className="h-4 w-4" />
+                    {isSubmitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
               </div>
@@ -325,22 +393,20 @@ const PoemDetailModal = ({
               </Button>
             )}
           </div>
-
           <DialogFooter className="border-t p-4 flex justify-between">
             <div className="flex space-x-4">
               <Button
                 variant="ghost"
                 size="sm"
-                className={`p-0 h-auto ${localIsLiked ? "text-red-500" : "text-gray-500 dark:text-gray-400"}`}
+                className={`p-0 h-auto ${isLiked ? "text-red-500" : "text-gray-500 dark:text-gray-400"}`}
                 onClick={handleLike}
               >
                 <Heart
                   className="h-5 w-5 mr-1"
-                  fill={localIsLiked ? "currentColor" : "none"}
+                  fill={isLiked ? "currentColor" : "none"}
                 />
-                <span>{localLikes}</span>
+                <span>{likes}</span>
               </Button>
-
               <Button
                 variant="ghost"
                 size="sm"
@@ -350,23 +416,21 @@ const PoemDetailModal = ({
                 }}
               >
                 <MessageCircle className="h-5 w-5 mr-1" />
-                <span>{localComments.length}</span>
+                <span>{formattedComments.length}</span>
               </Button>
             </div>
-
             <div className="flex space-x-2">
               <Button
                 variant="ghost"
                 size="icon"
-                className={`p-0 h-auto ${localIsBookmarked ? "text-blue-500" : "text-gray-500 dark:text-gray-400"}`}
+                className={`p-0 h-auto ${isBookmarked ? "text-blue-500" : "text-gray-500 dark:text-gray-400"}`}
                 onClick={handleBookmark}
               >
                 <Bookmark
                   className="h-5 w-5"
-                  fill={localIsBookmarked ? "currentColor" : "none"}
+                  fill={isBookmarked ? "currentColor" : "none"}
                 />
               </Button>
-
               <Button
                 variant="ghost"
                 size="icon"
@@ -379,7 +443,6 @@ const PoemDetailModal = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}

@@ -6,6 +6,8 @@ interface Poem {
   id: string;
   title: string;
   author: string;
+  authorId: string;
+  authorImage?: string;
   content: string;
   hashtags: string[];
   likes: number;
@@ -24,49 +26,13 @@ interface PoemFeedProps {
   onComment?: (poemId: string) => void;
   onBookmark?: (poemId: string) => void;
   onShare?: (poemId: string) => void;
+  onAuthorClick?: (authorId: string, authorName: string) => void;
   isAuthenticated?: boolean;
   onAuthRequired?: () => void;
 }
 
 const PoemFeed = ({
-  poems = [
-    {
-      id: "1",
-      title: "Whispers of Autumn",
-      author: "Emily Frost",
-      content:
-        "Crimson leaves dance in the wind,\nWhispering secrets of seasons past.\nGolden light filters through branches,\nPainting shadows on the forest floor.",
-      hashtags: ["nature", "autumn", "reflection"],
-      likes: 42,
-      comments: 7,
-      isLiked: false,
-      isBookmarked: false,
-    },
-    {
-      id: "2",
-      title: "Urban Symphony",
-      author: "Marcus Chen",
-      content:
-        "Steel giants touch the clouds,\nHumming with electric life.\nFootsteps and voices blend\nInto the city's endless song.",
-      hashtags: ["city", "urban", "modern"],
-      likes: 38,
-      comments: 5,
-      isLiked: true,
-      isBookmarked: true,
-    },
-    {
-      id: "3",
-      title: "Ocean Memories",
-      author: "Sophia Waters",
-      content:
-        "Salt-kissed air fills my lungs,\nWaves whisper ancient stories.\nBare feet sink into warm sand,\nAs memories wash ashore with the tide.",
-      hashtags: ["ocean", "memories", "summer"],
-      likes: 56,
-      comments: 12,
-      isLiked: false,
-      isBookmarked: true,
-    },
-  ],
+  poems = [],
   isLoading = false,
   hasMore = true,
   onLoadMore = () => {},
@@ -75,6 +41,7 @@ const PoemFeed = ({
   onComment = () => {},
   onBookmark = () => {},
   onShare = () => {},
+  onAuthorClick = () => {},
   isAuthenticated = false,
   onAuthRequired = () => {},
 }: PoemFeedProps) => {
@@ -133,6 +100,7 @@ const PoemFeed = ({
             id={poem.id}
             title={poem.title}
             author={poem.author}
+            authorImage={poem.authorImage}
             content={poem.content}
             hashtags={poem.hashtags}
             likes={poem.likes}
@@ -144,6 +112,7 @@ const PoemFeed = ({
             onComment={() => onComment(poem.id)}
             onBookmark={() => onBookmark(poem.id)}
             onShare={() => onShare(poem.id)}
+            onAuthorClick={() => onAuthorClick(poem.authorId, poem.author)}
             isAuthenticated={isAuthenticated}
             onAuthRequired={onAuthRequired}
           />

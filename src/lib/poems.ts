@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { Poem, Comment } from "./auth";
+import { createNotification } from "./notifications";
 
 export async function getPoems() {
   try {
@@ -300,6 +301,25 @@ export async function addComment({
       .select(`*, profiles(*)`);
       
     if (error) throw error;
+
+    // Get the poem to find the author for notification
+    const { data: poem } = await supabase
+      .from("poems")
+      .select("author_id, title")
+      .eq("id", poemId)
+      .single();
+
+    // Create a notification for the poem author
+    if (poem && poem.author_id !== userId) {
+      await createNotification({
+        userId: poem.author_id,
+        senderId: userId,
+        poemId: poemId,
+        type: 'comment',
+        content: content.substring(0, 100) // Include part of the comment in the notification
+      });
+    }
+    
     return { comment: data[0], error: null };
   } catch (error) {
     console.error("Error adding comment:", error);
@@ -340,6 +360,24 @@ export async function likePoem({
       });
       
       if (error) throw error;
+
+      // Get the poem to find the author for notification
+      const { data: poem } = await supabase
+        .from("poems")
+        .select("author_id, title")
+        .eq("id", poemId)
+        .single();
+
+      // Create a notification for the poem author
+      if (poem && poem.author_id !== userId) {
+        await createNotification({
+          userId: poem.author_id,
+          senderId: userId,
+          poemId: poemId,
+          type: 'like',
+        });
+      }
+      
       return { liked: true, error: null };
     }
   } catch (error) {

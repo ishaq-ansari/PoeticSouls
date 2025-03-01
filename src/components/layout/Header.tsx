@@ -7,6 +7,7 @@ import {
   LogOut,
   Settings,
   BookMarked,
+  MessageSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,6 +15,8 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogTrigger, DialogContent } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
+import NotificationsDropdown from "@/components/notifications/NotificationsDropdown";
+import { Notification } from "@/lib/notifications";
 
 interface HeaderProps {
   isAuthenticated?: boolean;
@@ -30,6 +33,8 @@ interface HeaderProps {
   onEditProfileClick?: () => void;
   onMyPoemsClick?: () => void;
   onBookmarksClick?: () => void;
+  onNotificationClick?: (notification: Notification) => void;
+  onChatClick?: () => void;
 }
 
 const Header = ({
@@ -47,11 +52,21 @@ const Header = ({
   onEditProfileClick = () => {},
   onMyPoemsClick = () => {},
   onBookmarksClick = () => {},
+  onNotificationClick = () => {},
+  onChatClick = () => {},
 }: HeaderProps) => {
+  const { profile } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Use the display name from the profile if available, otherwise fall back to passed username
+  const displayName = profile?.display_name || username;
 
   const handleTabChange = (value: string) => {
     onTabChange(value);
+  };
+
+  const handleNotificationClick = (notification: Notification) => {
+    onNotificationClick(notification);
   };
 
   return (
@@ -91,6 +106,22 @@ const Header = ({
           <Moon className="h-4 w-4" />
         </div>
 
+        {isAuthenticated && (
+          <>
+            <NotificationsDropdown onNotificationClick={handleNotificationClick} />
+            
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onChatClick}
+              className="relative"
+              aria-label="Messages"
+            >
+              <MessageSquare className="h-5 w-5" />
+            </Button>
+          </>
+        )}
+
         <Button
           onClick={onWritePoemClick}
           className="hidden md:flex items-center gap-2"
@@ -105,12 +136,12 @@ const Header = ({
               <Button variant="ghost" className="flex items-center gap-2">
                 <Avatar className="h-8 w-8">
                   {userAvatar ? (
-                    <AvatarImage src={userAvatar} alt={username} />
+                    <AvatarImage src={userAvatar} alt={displayName} />
                   ) : (
-                    <AvatarFallback>{username[0]}</AvatarFallback>
+                    <AvatarFallback>{displayName[0]}</AvatarFallback>
                   )}
                 </Avatar>
-                <span className="hidden md:inline">{username}</span>
+                <span className="hidden md:inline">{displayName}</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
@@ -119,15 +150,14 @@ const Header = ({
                   <h2 className="text-xl font-medium">Account</h2>
                   <Avatar className="w-20 h-20">
                     {userAvatar ? (
-                      <AvatarImage src={userAvatar} alt={username} />
+                      <AvatarImage src={userAvatar} alt={displayName} />
                     ) : (
                       <AvatarFallback className="text-lg">
-                        {username[0]}
+                        {displayName[0]}
                       </AvatarFallback>
                     )}
                   </Avatar>
-                  <p className="text-lg">{username}</p>
-
+                  <p className="text-lg">{displayName}</p>
                   <Button
                     variant="outline"
                     className="w-full flex items-center justify-start gap-2"
@@ -139,7 +169,6 @@ const Header = ({
                     <Settings className="h-4 w-4" />
                     Edit Profile
                   </Button>
-
                   <Button
                     variant="outline"
                     className="w-full flex items-center justify-start gap-2"
@@ -151,7 +180,6 @@ const Header = ({
                     <PenSquare className="h-4 w-4" />
                     My Poems
                   </Button>
-
                   <Button
                     variant="outline"
                     className="w-full flex items-center justify-start gap-2"
@@ -163,7 +191,6 @@ const Header = ({
                     <BookMarked className="h-4 w-4" />
                     Bookmarks
                   </Button>
-
                   <Button
                     variant="destructive"
                     className="w-full flex items-center justify-start gap-2"

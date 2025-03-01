@@ -90,7 +90,7 @@ const AuthModal = ({
     setSuccess(null);
 
     try {
-      const result = await signIn(data);
+      const result = await signIn(data as { email: string; password: string });
 
       if (result.error) {
         setError(result.error.message || "Invalid email or password. Please try again.");
@@ -118,6 +118,7 @@ const AuthModal = ({
       const result = await signUp({
         ...data,
         useRealName,
+      } as { displayName: string; email: string; password: string; useRealName: boolean
       });
 
       if (result.error) {

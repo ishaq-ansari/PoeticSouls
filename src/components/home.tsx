@@ -4,6 +4,7 @@ import PoemFeed from "./feed/PoemFeed";
 import AuthModal from "./auth/AuthModal";
 import CreatePoemModal from "./poem/CreatePoemModal";
 import PoemDetailModal from "./poem/PoemDetailModal";
+import ChatModal from "./chat/ChatModal"; // We'll create this
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getPoems,
@@ -15,18 +16,27 @@ import {
   getTrendingPoems,
   getBookmarkedPoems,
   getUserPoems,
+  getCommentsByPoemId,
 } from "@/lib/poems";
+import { Notification, markNotificationAsRead } from "@/lib/notifications";
 
 const Home = () => {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, refreshUser } = useAuth();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showCreatePoemModal, setShowCreatePoemModal] = useState(false);
   const [showPoemDetailModal, setShowPoemDetailModal] = useState(false);
+  const [showChatModal, setShowChatModal] = useState(false);
+  const [chatUserId, setChatUserId] = useState<string | null>(null);
+  const [chatUsername, setChatUsername] = useState<string>("");
   const [selectedPoemId, setSelectedPoemId] = useState<string | null>(null);
   const [poems, setPoems] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("feed");
+  const [poemComments, setPoemComments] = useState<any[]>([]);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
+  // Add a hasMore state that's actually managed properly
+  const [hasMore, setHasMore] = useState(false);
 
   // Sample poems data as fallback
   const samplePoems = [
@@ -104,6 +114,13 @@ const Home = () => {
     },
   ];
 
+  // Fetch user profile on initial load to make sure we have the latest data
+  useEffect(() => {
+    if (user) {
+      refreshUser();
+    }
+  }, [user]);
+
   // Fetch poems based on the active tab
   const fetchPoems = async () => {
     setIsLoading(true);
@@ -129,6 +146,7 @@ const Home = () => {
       if (error) {
         console.error(`Error fetching ${activeTab} poems:`, error);
         setPoems(samplePoems);
+        setHasMore(false);
         return;
       }
 
@@ -166,15 +184,48 @@ const Home = () => {
         }
 
         setPoems(transformedPoems);
+        // Set hasMore based on how many poems were fetched
+        // For now we'll set it to false since we're not implementing pagination yet
+        setHasMore(false); 
       } else {
         // If no poems were found, use the sample data
         setPoems(samplePoems);
+        setHasMore(false);
       }
     } catch (error) {
       console.error(`Error in fetchPoems for ${activeTab}:`, error);
       setPoems(samplePoems);
+      setHasMore(false);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Simulate loading more poems - in a real app, this would call an API with pagination
+  const handleLoadMore = () => {
+    // This is a stub for now - in a real app, you would fetch more poems with pagination
+    // For now, we'll just set hasMore to false to indicate there are no more poems
+    setHasMore(false);
+  };
+
+  // Fetch comments for a specific poem
+  const fetchPoemComments = async (poemId: string) => {
+    setIsLoadingComments(true);
+    try {
+      const { comments, error } = await getCommentsByPoemId(poemId);
+      
+      if (error) {
+        console.error("Error fetching comments:", error);
+        setPoemComments([]);
+        return;
+      }
+      
+      setPoemComments(comments || []);
+    } catch (error) {
+      console.error("Error in fetchPoemComments:", error);
+      setPoemComments([]);
+    } finally {
+      setIsLoadingComments(false);
     }
   };
 
@@ -194,6 +245,13 @@ const Home = () => {
   useEffect(() => {
     fetchPoems();
   }, [user, activeTab]);
+
+  // Fetch comments when poem modal is opened
+  useEffect(() => {
+    if (selectedPoemId && showPoemDetailModal) {
+      fetchPoemComments(selectedPoemId);
+    }
+  }, [selectedPoemId, showPoemDetailModal]);
 
   const handleThemeToggle = () => {
     const newDarkMode = !isDarkMode;
@@ -215,6 +273,106 @@ const Home = () => {
   const handlePoemClick = (poemId: string) => {
     setSelectedPoemId(poemId);
     setShowPoemDetailModal(true);
+  };
+
+  const handleLike = async (poemId: string) => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    try {
+      // Find the current poem
+      const poem = poems.find(poem => poem.id === poemId);
+      if (!poem) return;
+
+      // Toggle like state
+      const newLikedState = !poem.isLiked;
+
+      // Optimistically update UI
+      setPoems(prevPoems => prevPoems.map(p => 
+        p.id === poemId 
+          ? { 
+              ...p, 
+              isLiked: newLikedState, 
+              likes: newLikedState ? p.likes + 1 : p.likes - 1 
+            } 
+          : p
+      ));
+
+      // Call API to update like state
+      await likePoem({ poemId, userId: user.id });
+    } catch (error) {
+      console.error("Error liking poem:", error);
+      // Revert UI state on error
+      fetchPoems();
+    }
+  };
+
+  const handleBookmark = async (poemId: string) => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    try {
+      // Find the current poem
+      const poem = poems.find(poem => poem.id === poemId);
+      if (!poem) return;
+
+      // Toggle bookmark state
+      const newBookmarkState = !poem.isBookmarked;
+
+      // Optimistically update UI
+      setPoems(prevPoems => prevPoems.map(p => 
+        p.id === poemId 
+          ? { ...p, isBookmarked: newBookmarkState } 
+          : p
+      ));
+
+      // Call API to update bookmark state
+      await bookmarkPoem({ poemId, userId: user.id });
+    } catch (error) {
+      console.error("Error bookmarking poem:", error);
+      // Revert UI state on error
+      fetchPoems();
+    }
+  };
+
+  const handleComment = async (poemId: string, content: string) => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    try {
+      const { comment, error } = await addComment({ 
+        poemId, 
+        userId: user.id, 
+        content 
+      });
+
+      if (error) {
+        console.error("Error adding comment:", error);
+        return;
+      }
+
+      if (comment) {
+        // Update the comments list if we're viewing this poem
+        if (selectedPoemId === poemId) {
+          setPoemComments(prev => [comment, ...prev]);
+        }
+        
+        // Update the comment count in the poems list
+        setPoems(prevPoems => prevPoems.map(p => 
+          p.id === poemId 
+            ? { ...p, comments: p.comments + 1 } 
+            : p
+        ));
+      }
+    } catch (error) {
+      console.error("Error adding comment:", error);
+    }
   };
 
   const handleCreatePoemSubmit = async (poemData: any) => {
@@ -263,73 +421,55 @@ const Home = () => {
     }
   };
 
-  const handleLike = async (poemId: string, liked: boolean) => {
-    if (!user) return;
-
-    try {
-      await likePoem({ poemId, userId: user.id });
-
-      // Update the poems state
-      setPoems(
-        poems.map((poem) => {
-          if (poem.id === poemId) {
-            return {
-              ...poem,
-              isLiked: liked,
-              likes: liked ? poem.likes + 1 : poem.likes - 1,
-            };
-          }
-          return poem;
-        }),
-      );
-    } catch (error) {
-      console.error("Error liking poem:", error);
+  // Handle author click to open chat
+  const handleAuthorClick = (authorId: string, authorName: string) => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
     }
+    
+    // Don't open chat with yourself
+    if (user.id === authorId) {
+      return;
+    }
+    
+    setChatUserId(authorId);
+    setChatUsername(authorName);
+    setShowChatModal(true);
   };
 
-  const handleBookmark = async (poemId: string, bookmarked: boolean) => {
-    if (!user) return;
-
-    try {
-      await bookmarkPoem({ poemId, userId: user.id });
-
-      // Update the poems state
-      setPoems(
-        poems.map((poem) => {
-          if (poem.id === poemId) {
-            return {
-              ...poem,
-              isBookmarked: bookmarked,
-            };
-          }
-          return poem;
-        }),
-      );
-    } catch (error) {
-      console.error("Error bookmarking poem:", error);
+  // Open the chat modal from header
+  const handleChatClick = () => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
     }
+    
+    setChatUserId(null); // No specific recipient initially
+    setChatUsername("");
+    setShowChatModal(true);
   };
 
-  const handleComment = async (poemId: string, content: string) => {
-    if (!user) return;
+  // Open the poem modal when clicking the comment button
+  const handleCommentClick = (poemId: string) => {
+    handlePoemClick(poemId);
+  };
 
-    try {
-      await addComment({ poemId, userId: user.id, content });
-
-      // Update the poems state
-      setPoems(
-        poems.map((poem) => {
-          if (poem.id === poemId) {
-            return {
-              ...poem,
-              comments: poem.comments + 1,
-            };
-          }
-          return poem;
-        }),
-      );
-    } catch (error) {
-      console.error("Error adding comment:", error);
+  // Handle notification click
+  const handleNotificationClick = async (notification: Notification) => {
+    // Mark the notification as read
+    await markNotificationAsRead(notification.id);
+    
+    // If it's a poem-related notification, open the poem detail modal
+    if (notification.poem_id) {
+      setSelectedPoemId(notification.poem_id);
+      setShowPoemDetailModal(true);
+    }
+    
+    // If sent by another user, provide option to chat with them
+    if (notification.sender_id && notification.sender_id !== user?.id) {
+      // Could show a button or toast to start chat with this user
+      // For now we'll just focus on the poem
     }
   };
 
@@ -358,11 +498,19 @@ const Home = () => {
           setShowAuthModal(true);
         }}
         onSignOutClick={async () => {
-          await signOut();
-          fetchPoems(); // Refetch poems to update like/bookmark status
+          try {
+            await signOut();
+            // Reset state after sign out
+            setActiveTab("feed");
+            fetchPoems(); // Refetch poems to update like/bookmark status
+          } catch (error) {
+            console.error("Error signing out:", error);
+          }
         }}
         onMyPoemsClick={() => setActiveTab("my-poems")}
         onBookmarksClick={() => setActiveTab("bookmarks")}
+        onNotificationClick={handleNotificationClick}
+        onChatClick={handleChatClick}
       />
 
       <main className="flex-1 container mx-auto py-6 px-4">
@@ -370,7 +518,12 @@ const Home = () => {
           poems={poems}
           isLoading={isLoading}
           onPoemClick={handlePoemClick}
-          hasMore={false}
+          onLike={handleLike}
+          onComment={handleCommentClick}
+          onBookmark={handleBookmark}
+          onAuthorClick={handleAuthorClick}
+          hasMore={hasMore}
+          onLoadMore={handleLoadMore}
           isAuthenticated={!!user}
           onAuthRequired={() => setShowAuthModal(true)}
         />
@@ -405,11 +558,23 @@ const Home = () => {
           isLiked={selectedPoem.isLiked}
           isBookmarked={selectedPoem.isBookmarked}
           createdAt={selectedPoem.createdAt}
-          onLike={handleLike}
-          onBookmark={handleBookmark}
-          onComment={handleComment}
+          onLike={() => handleLike(selectedPoem.id)}
+          onBookmark={() => handleBookmark(selectedPoem.id)}
+          onComment={(content) => handleComment(selectedPoem.id, content)}
+          onAuthorClick={() => handleAuthorClick(selectedPoem.authorId, selectedPoem.author)}
+          comments={poemComments}
+          isLoadingComments={isLoadingComments}
         />
       )}
+
+      {/* Chat Modal */}
+      <ChatModal
+        open={showChatModal}
+        onOpenChange={setShowChatModal}
+        userId={user?.id || ""}
+        recipientId={chatUserId}
+        recipientName={chatUsername}
+      />
     </div>
   );
 };

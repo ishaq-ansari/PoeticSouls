@@ -20,6 +20,7 @@ interface PoemCardProps {
   id?: string;
   title?: string;
   author?: string;
+  authorImage?: string;
   content?: string;
   hashtags?: string[];
   likes?: number;
@@ -31,6 +32,7 @@ interface PoemCardProps {
   onComment?: () => void;
   onBookmark?: () => void;
   onShare?: () => void;
+  onAuthorClick?: () => void;
   isAuthenticated?: boolean;
   onAuthRequired?: () => void;
 }
@@ -39,6 +41,7 @@ const PoemCard = ({
   id = "1",
   title = "Whispers of Autumn",
   author = "Emily Frost",
+  authorImage,
   content = "Crimson leaves dance in the wind,\nWhispering secrets of seasons past.\nGolden light filters through branches,\nPainting shadows on the forest floor.",
   hashtags = ["nature", "autumn", "reflection"],
   likes = 42,
@@ -50,6 +53,7 @@ const PoemCard = ({
   onComment = () => {},
   onBookmark = () => {},
   onShare = () => {},
+  onAuthorClick = () => {},
   isAuthenticated = false,
   onAuthRequired = () => {},
 }: PoemCardProps) => {
